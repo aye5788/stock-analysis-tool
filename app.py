@@ -7,6 +7,21 @@ import matplotlib.pyplot as plt
 # Alpha Vantage API Key
 API_KEY = "CLP9IN76G4S8OUXN"
 
+# Helper function to format large numbers
+def format_large_numbers(value):
+    try:
+        if value >= 1e12:
+            return f"{value / 1e12:.2f}T"
+        elif value >= 1e9:
+            return f"{value / 1e9:.2f}B"
+        elif value >= 1e6:
+            return f"{value / 1e6:.2f}M"
+        elif value >= 1e3:
+            return f"{value / 1e3:.2f}K"
+        return f"{value:.2f}"
+    except:
+        return value
+
 # Fetch data from Alpha Vantage
 def fetch_data(function, symbol, params=None):
     url = f"https://www.alphavantage.co/query?function={function}&symbol={symbol}&apikey={API_KEY}"
@@ -18,19 +33,6 @@ def fetch_data(function, symbol, params=None):
     else:
         st.error(f"Error fetching data: {response.status_code}")
         return None
-
-# Format large numbers for readability
-def format_large_numbers(value):
-    if isinstance(value, (int, float)):
-        if value >= 1e12:
-            return f"{value / 1e12:.2f}T"
-        elif value >= 1e9:
-            return f"{value / 1e9:.2f}B"
-        elif value >= 1e6:
-            return f"{value / 1e6:.2f}M"
-        elif value >= 1e3:
-            return f"{value / 1e3:.2f}K"
-    return value
 
 # Process and calculate metrics
 def calculate_metrics(overview, income_statement):
@@ -110,7 +112,7 @@ def main():
     ticker = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL, MSFT):")
     timeframe = st.sidebar.selectbox(
         "Select Timeframe for Metrics", 
-        ["YTD", "5Y", "MAX", "Custom"]
+        ["1D", "1W", "1Y", "YTD", "5Y", "MAX", "Custom"]
     )
 
     custom_timeframe = None
@@ -119,78 +121,67 @@ def main():
         custom_unit = st.sidebar.selectbox("Select Unit:", ["Years"])
         custom_timeframe = (custom_length, custom_unit)
 
-    # Initialize metrics_df
-    metrics_df = None
-
     if ticker:
         st.write(f"Fetching data for {ticker}...")
-
+        
         # Fetch overview and income statement
         overview = fetch_data("OVERVIEW", ticker)
         income_statement = fetch_data("INCOME_STATEMENT", ticker)
+        
+        # Fetch stock prices
+        stock_prices = fetch_stock_prices(ticker, timeframe)
 
         if overview and income_statement:
             # Calculate metrics
             metrics_df = calculate_metrics(overview, income_statement)
+            
+            if metrics_df is not None:
+                # Transpose and display metrics
+                metrics_df_transposed = metrics_df.set_index("Year").transpose()
+                metrics_df_transposed.index.name = "Metric"
+                
+                metric_labels = {
+                    "Total Revenue": "Total Revenue ($)",
+                    "Net Income": "Net Income ($)",
+                    "P/E Ratio": "Price-to-Earnings Ratio",
+                    "P/B Ratio": "Price-to-Book Ratio",
+                    "ROE (%)": "Return on Equity (%)",
+                    "ROA (%)": "Return on Assets (%)",
+                    "Debt-to-Equity": "Debt-to-Equity Ratio",
+                    "Free Cash Flow Yield (%)": "Free Cash Flow Yield (%)",
+                    "Revenue Growth (%)": "Revenue Growth (%)",
+                    "Net Income Growth (%)": "Net Income Growth (%)",
+                }
+                metrics_df_transposed.rename(index=metric_labels, inplace=True)
+                metrics_df_transposed = metrics_df_transposed.applymap(format_large_numbers)
+
+                st.subheader(f"Metrics for {ticker.upper()} ({timeframe})")
+                gb = GridOptionsBuilder.from_dataframe(metrics_df_transposed)
+                gb.configure_default_column(wrapHeaderText=True, autoHeight=True)
+                gb.configure_column("Metric", pinned=True)
+                grid_options = gb.build()
+                AgGrid(metrics_df_transposed, gridOptions=grid_options, height=400, theme="balham")
+
+                # Year-over-Year Comparison
+                st.subheader("Year-over-Year Comparison")
+                st.line_chart(metrics_df.set_index("Year")[["Total Revenue", "Net Income"]])
+
+        if stock_prices is not None:
+            # Plot stock prices
+            st.subheader(f"{ticker.upper()} Stock Chart ({timeframe})")
+            stock_prices.index = pd.to_datetime(stock_prices.index)
+            stock_prices = stock_prices.sort_index()
+
+            plt.figure(figsize=(10, 5))
+            plt.plot(stock_prices.index, stock_prices["4. close"], label="Close Price")
+            plt.xlabel("Date")
+            plt.ylabel("Close Price")
+            plt.title(f"{ticker.upper()} Stock Price")
+            plt.legend()
+            st.pyplot(plt)
         else:
-            st.error("Failed to fetch overview or income statement data.")
-
-       # Display metrics if available
-if metrics_df is not None:
-    st.subheader(f"Metrics for {ticker.upper()} ({timeframe})")
-
-    # Filter metrics by timeframe
-    if timeframe == "YTD":
-        metrics_df = metrics_df[metrics_df["Year"] == str(pd.Timestamp.now().year)]
-    elif timeframe == "5Y":
-        metrics_df = metrics_df.head(5)
-    elif timeframe == "MAX":
-        metrics_df = metrics_df
-    elif timeframe == "Custom" and custom_timeframe:
-        custom_length, custom_unit = custom_timeframe
-        if custom_unit == "Years":
-            metrics_df = metrics_df.head(custom_length)
-
-    # Transpose the table and set proper row identification
-    metrics_df_transposed = metrics_df.set_index("Year").transpose()
-    metrics_df_transposed.index.name = "Metric"
-
-    # Add human-readable labels for each metric
-    metric_labels = {
-        "Total Revenue": "Total Revenue ($)",
-        "Net Income": "Net Income ($)",
-        "P/E Ratio": "Price-to-Earnings Ratio",
-        "P/B Ratio": "Price-to-Book Ratio",
-        "ROE (%)": "Return on Equity (%)",
-        "ROA (%)": "Return on Assets (%)",
-        "Debt-to-Equity": "Debt-to-Equity Ratio",
-        "Free Cash Flow Yield (%)": "Free Cash Flow Yield (%)",
-        "Revenue Growth (%)": "Revenue Growth (%)",
-        "Net Income Growth (%)": "Net Income Growth (%)",
-    }
-    metrics_df_transposed.rename(index=metric_labels, inplace=True)
-
-    # Format numbers for readability
-    metrics_df_transposed = metrics_df_transposed.applymap(format_large_numbers)
-
-    # Display table with AgGrid
-    gb = GridOptionsBuilder.from_dataframe(metrics_df_transposed)
-    gb.configure_default_column(wrapHeaderText=True, autoHeight=True)
-    gb.configure_column("Metric", pinned=True)
-    grid_options = gb.build()
-
-    AgGrid(
-        metrics_df_transposed,
-        gridOptions=grid_options,
-        height=400,
-        theme="balham",
-    )
-
-    # Year-over-Year Comparison Chart
-            st.subheader("Year-over-Year Comparison")
-            st.line_chart(metrics_df.set_index("Year")[["Total Revenue", "Net Income"]])
-        else:
-            st.error("Metrics data is unavailable.")
+            st.error("Failed to fetch stock price data.")
 
 if __name__ == "__main__":
     main()
+
