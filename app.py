@@ -52,13 +52,19 @@ def calculate_metrics(overview, income_statement):
         return None
 
 # Fetch and process stock price data
-def fetch_stock_prices(symbol, interval):
-    params = f"interval={interval}&datatype=json"
-    time_series = fetch_data("TIME_SERIES_INTRADAY", symbol, params=params)
-    if time_series and "Time Series" in time_series:
-        return pd.DataFrame.from_dict(time_series[f"Time Series ({interval})"], orient="index").astype(float)
+def fetch_stock_prices(symbol, timeframe):
+    if timeframe in ["1D", "1W"]:
+        interval = "60min"
+        params = f"interval={interval}&datatype=json"
+        time_series = fetch_data("TIME_SERIES_INTRADAY", symbol, params=params)
+        if time_series and f"Time Series ({interval})" in time_series:
+            return pd.DataFrame.from_dict(time_series[f"Time Series ({interval})"], orient="index").astype(float)
     else:
-        return None
+        params = "outputsize=full&datatype=json"
+        time_series = fetch_data("TIME_SERIES_DAILY_ADJUSTED", symbol, params=params)
+        if time_series and "Time Series (Daily)" in time_series:
+            return pd.DataFrame.from_dict(time_series["Time Series (Daily)"], orient="index").astype(float)
+    return None
 
 # Main Streamlit App
 def main():
@@ -77,8 +83,7 @@ def main():
         income_statement = fetch_data("INCOME_STATEMENT", ticker)
         
         # Fetch stock prices
-        interval = "60min" if timeframe in ["1D", "1W"] else "daily"
-        stock_prices = fetch_stock_prices(ticker, interval)
+        stock_prices = fetch_stock_prices(ticker, timeframe)
 
         if overview and income_statement:
             # Calculate metrics
@@ -87,12 +92,18 @@ def main():
             if metrics_df is not None:
                 st.subheader(f"Metrics for {ticker.upper()} ({timeframe})")
 
-                # Display metrics table with YoY growth percentages
-                st.dataframe(metrics_df)
-
-                # Filter metrics by timeframe if applicable
+                # Filter metrics by timeframe
                 if timeframe == "YTD":
                     metrics_df = metrics_df[metrics_df["Year"] == str(pd.Timestamp.now().year)]
+                elif timeframe == "5Y":
+                    metrics_df = metrics_df.head(5)
+                elif timeframe == "MAX":
+                    metrics_df = metrics_df
+                else:
+                    metrics_df = metrics_df.head(1)  # Default to the most recent year
+
+                # Display metrics table with YoY growth percentages
+                st.dataframe(metrics_df)
 
                 # Year-over-Year Comparison (Chart)
                 st.subheader("Year-over-Year Comparison")
