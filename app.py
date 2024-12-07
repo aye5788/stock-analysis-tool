@@ -138,21 +138,44 @@ def main():
                 else:
                     metrics_df = metrics_df  # Default to show all available data
                 
-                # Transpose and display metrics with AgGrid for better layout and scrolling
-                metrics_df_transposed = metrics_df.set_index("Year").transpose()
-                gb = GridOptionsBuilder.from_dataframe(metrics_df_transposed)
-                gb.configure_default_column(wrapHeaderText=True, autoHeight=True)
-                gb.configure_column("index", pinned=True)
-                grid_options = gb.build()
+              # Transpose and Display Metrics with AgGrid
+if metrics_df is not None:
+    st.subheader(f"Metrics for {ticker.upper()} ({timeframe})")
 
-                AgGrid(
-                    metrics_df_transposed,
-                    gridOptions=grid_options,
-                    height=400,
-                    theme="balham",
-                    enable_enterprise_modules=True,
-                )
+    # Filter metrics by timeframe
+    if timeframe == "YTD":
+        metrics_df = metrics_df[metrics_df["Year"] == str(pd.Timestamp.now().year)]
+    elif timeframe == "5Y":
+        metrics_df = metrics_df.head(5)
+    elif timeframe == "MAX":
+        metrics_df = metrics_df
+    elif timeframe == "Custom" and custom_timeframe:
+        custom_length, custom_unit = custom_timeframe
+        if custom_unit == "Years":
+            metrics_df = metrics_df.head(custom_length)
+        # Add logic for months or days as needed
 
+    # Transpose the table
+    metrics_df_transposed = metrics_df.set_index("Year").transpose()
+
+    # Format numbers with commas
+    metrics_df_transposed = metrics_df_transposed.applymap(
+        lambda x: f"{x:,.2f}" if isinstance(x, (int, float)) else x
+    )
+
+    # Display table using AgGrid
+    gb = GridOptionsBuilder.from_dataframe(metrics_df_transposed)
+    gb.configure_default_column(wrapHeaderText=True, autoHeight=True)
+    gb.configure_column("index", pinned=True)
+    grid_options = gb.build()
+
+    AgGrid(
+        metrics_df_transposed,
+        gridOptions=grid_options,
+        height=400,
+        theme="balham",
+        enable_enterprise_modules=True,
+    )
                 # Year-over-Year Comparison (Chart)
                 st.subheader("Year-over-Year Comparison")
                 st.line_chart(metrics_df.set_index("Year")[["Total Revenue", "Net Income"]])
