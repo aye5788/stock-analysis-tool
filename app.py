@@ -123,8 +123,11 @@ def main():
                 else:
                     metrics_df = metrics_df  # Default to show all available data
                 
-                # Display metrics table
-                st.dataframe(metrics_df)
+                # Transpose the table
+                metrics_df_transposed = metrics_df.set_index("Year").transpose()
+
+                # Display metrics table with horizontal scrolling
+                st.dataframe(metrics_df_transposed, use_container_width=True, height=400)
 
                 # Year-over-Year Comparison (Chart)
                 st.subheader("Year-over-Year Comparison")
