@@ -73,21 +73,6 @@ def calculate_metrics(overview, income_statement):
         st.error(f"Error processing metrics: {e}")
         return None
 
-# Fetch and process stock price data
-def fetch_stock_prices(symbol, timeframe):
-    if timeframe in ["1D", "1W"]:
-        interval = "60min"
-        params = f"interval={interval}&datatype=json"
-        time_series = fetch_data("TIME_SERIES_INTRADAY", symbol, params=params)
-        if time_series and f"Time Series ({interval})" in time_series:
-            return pd.DataFrame.from_dict(time_series[f"Time Series ({interval})"], orient="index").astype(float)
-    else:
-        params = "outputsize=full&datatype=json"
-        time_series = fetch_data("TIME_SERIES_DAILY_ADJUSTED", symbol, params=params)
-        if time_series and "Time Series (Daily)" in time_series:
-            return pd.DataFrame.from_dict(time_series["Time Series (Daily)"], orient="index").astype(float)
-    return None
-
 # Main Streamlit App
 def main():
     st.title("Enhanced Stock Analysis Tool")
@@ -113,17 +98,12 @@ def main():
         overview = fetch_data("OVERVIEW", ticker)
         income_statement = fetch_data("INCOME_STATEMENT", ticker)
         
-        # Fetch stock prices
-        stock_prices = fetch_stock_prices(ticker, timeframe)
-
         if overview and income_statement:
             # Calculate metrics
             metrics_df = calculate_metrics(overview, income_statement)
             
             if metrics_df is not None:
-                st.subheader(f"Metrics for {ticker.upper()} ({timeframe})")
-
-                # Filter metrics by timeframe
+                # Filter by timeframe
                 if timeframe == "YTD":
                     metrics_df = metrics_df[metrics_df["Year"] == str(pd.Timestamp.now().year)]
                 elif timeframe == "5Y":
@@ -134,67 +114,31 @@ def main():
                     custom_length, custom_unit = custom_timeframe
                     if custom_unit == "Years":
                         metrics_df = metrics_df.head(custom_length)
-                    # Add logic for months or days as needed
-                else:
-                    metrics_df = metrics_df  # Default to show all available data
-                
-              # Transpose and Display Metrics with AgGrid
-if metrics_df is not None:
-    st.subheader(f"Metrics for {ticker.upper()} ({timeframe})")
 
-    # Filter metrics by timeframe
-    if timeframe == "YTD":
-        metrics_df = metrics_df[metrics_df["Year"] == str(pd.Timestamp.now().year)]
-    elif timeframe == "5Y":
-        metrics_df = metrics_df.head(5)
-    elif timeframe == "MAX":
-        metrics_df = metrics_df
-    elif timeframe == "Custom" and custom_timeframe:
-        custom_length, custom_unit = custom_timeframe
-        if custom_unit == "Years":
-            metrics_df = metrics_df.head(custom_length)
-        # Add logic for months or days as needed
+                # Transpose the table
+                metrics_df_transposed = metrics_df.set_index("Year").transpose()
 
-    # Transpose the table
-    metrics_df_transposed = metrics_df.set_index("Year").transpose()
+                # Format numbers
+                metrics_df_transposed = metrics_df_transposed.applymap(
+                    lambda x: f"{x:,.2f}" if isinstance(x, (int, float)) else x
+                )
 
-    # Format numbers with commas
-    metrics_df_transposed = metrics_df_transposed.applymap(
-        lambda x: f"{x:,.2f}" if isinstance(x, (int, float)) else x
-    )
+                # Display table using AgGrid
+                st.subheader(f"Metrics for {ticker.upper()} ({timeframe})")
+                gb = GridOptionsBuilder.from_dataframe(metrics_df_transposed)
+                gb.configure_default_column(wrapHeaderText=True, autoHeight=True)
+                grid_options = gb.build()
 
-    # Display table using AgGrid
-    gb = GridOptionsBuilder.from_dataframe(metrics_df_transposed)
-    gb.configure_default_column(wrapHeaderText=True, autoHeight=True)
-    gb.configure_column("index", pinned=True)
-    grid_options = gb.build()
+                AgGrid(
+                    metrics_df_transposed,
+                    gridOptions=grid_options,
+                    height=400,
+                    theme="balham",
+                )
 
-    AgGrid(
-        metrics_df_transposed,
-        gridOptions=grid_options,
-        height=400,
-        theme="balham",
-        enable_enterprise_modules=True,
-    )
                 # Year-over-Year Comparison (Chart)
                 st.subheader("Year-over-Year Comparison")
                 st.line_chart(metrics_df.set_index("Year")[["Total Revenue", "Net Income"]])
-
-        if stock_prices is not None:
-            # Prepare and plot stock prices
-            st.subheader(f"{ticker.upper()} Stock Chart ({timeframe})")
-            stock_prices.index = pd.to_datetime(stock_prices.index)
-            stock_prices = stock_prices.sort_index()
-
-            plt.figure(figsize=(10, 5))
-            plt.plot(stock_prices.index, stock_prices["4. close"], label="Close Price")
-            plt.xlabel("Date")
-            plt.ylabel("Close Price")
-            plt.title(f"{ticker.upper()} Stock Price")
-            plt.legend()
-            st.pyplot(plt)
-        else:
-            st.error("Failed to fetch stock price data.")
 
 if __name__ == "__main__":
     main()
