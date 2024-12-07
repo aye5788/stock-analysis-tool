@@ -29,7 +29,21 @@ def calculate_metrics(overview, income_statement):
             revenue = float(annual_reports[i].get("totalRevenue", 0))
             net_income = float(annual_reports[i].get("netIncome", 0))
 
-            # Calculate YoY growth
+            # Valuation Metrics
+            pe_ratio = float(overview.get("PERatio", 0))
+            pb_ratio = float(overview.get("PriceToBookRatio", 0))
+
+            # Profitability Metrics
+            roe = float(overview.get("ReturnOnEquityTTM", 0))
+            roa = float(overview.get("ReturnOnAssetsTTM", 0))
+
+            # Quality Metrics
+            free_cash_flow = float(overview.get("FreeCashflowTTM", 0))
+            market_cap = float(overview.get("MarketCapitalization", 0))
+            fcf_yield = (free_cash_flow / market_cap) * 100 if market_cap > 0 else None
+            debt_to_equity = float(overview.get("DebtToEquity", 0))
+
+            # Growth Metrics
             revenue_growth = None
             net_income_growth = None
             if i < len(annual_reports) - 1:  # Ensure there's a previous year for comparison
@@ -38,10 +52,17 @@ def calculate_metrics(overview, income_statement):
                 revenue_growth = ((revenue - prev_revenue) / prev_revenue) * 100 if prev_revenue > 0 else None
                 net_income_growth = ((net_income - prev_net_income) / prev_net_income) * 100 if prev_net_income > 0 else None
 
+            # Add metrics to the list
             metrics.append({
                 "Year": year,
                 "Total Revenue": revenue,
                 "Net Income": net_income,
+                "P/E Ratio": pe_ratio,
+                "P/B Ratio": pb_ratio,
+                "ROE (%)": roe,
+                "ROA (%)": roa,
+                "Debt-to-Equity": debt_to_equity,
+                "Free Cash Flow Yield (%)": fcf_yield,
                 "Revenue Growth (%)": revenue_growth,
                 "Net Income Growth (%)": net_income_growth,
             })
@@ -100,9 +121,9 @@ def main():
                 elif timeframe == "MAX":
                     metrics_df = metrics_df
                 else:
-                    metrics_df = metrics_df.head(1)  # Default to the most recent year
-
-                # Display metrics table with YoY growth percentages
+                    metrics_df = metrics_df  # Default to show all available data
+                
+                # Display metrics table
                 st.dataframe(metrics_df)
 
                 # Year-over-Year Comparison (Chart)
