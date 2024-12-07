@@ -135,43 +135,58 @@ def main():
         else:
             st.error("Failed to fetch overview or income statement data.")
 
-        # Display metrics if available
-        if metrics_df is not None:
-            st.subheader(f"Metrics for {ticker.upper()} ({timeframe})")
+       # Display metrics if available
+if metrics_df is not None:
+    st.subheader(f"Metrics for {ticker.upper()} ({timeframe})")
 
-            # Filter metrics by timeframe
-            if timeframe == "YTD":
-                metrics_df = metrics_df[metrics_df["Year"] == str(pd.Timestamp.now().year)]
-            elif timeframe == "5Y":
-                metrics_df = metrics_df.head(5)
-            elif timeframe == "MAX":
-                metrics_df = metrics_df
-            elif timeframe == "Custom" and custom_timeframe:
-                custom_length, custom_unit = custom_timeframe
-                if custom_unit == "Years":
-                    metrics_df = metrics_df.head(custom_length)
+    # Filter metrics by timeframe
+    if timeframe == "YTD":
+        metrics_df = metrics_df[metrics_df["Year"] == str(pd.Timestamp.now().year)]
+    elif timeframe == "5Y":
+        metrics_df = metrics_df.head(5)
+    elif timeframe == "MAX":
+        metrics_df = metrics_df
+    elif timeframe == "Custom" and custom_timeframe:
+        custom_length, custom_unit = custom_timeframe
+        if custom_unit == "Years":
+            metrics_df = metrics_df.head(custom_length)
 
-            # Transpose the table and set proper row identification
-            metrics_df_transposed = metrics_df.set_index("Year").transpose()
-            metrics_df_transposed.index.name = "Metric"
+    # Transpose the table and set proper row identification
+    metrics_df_transposed = metrics_df.set_index("Year").transpose()
+    metrics_df_transposed.index.name = "Metric"
 
-            # Format numbers for readability
-            metrics_df_transposed = metrics_df_transposed.applymap(format_large_numbers)
+    # Add human-readable labels for each metric
+    metric_labels = {
+        "Total Revenue": "Total Revenue ($)",
+        "Net Income": "Net Income ($)",
+        "P/E Ratio": "Price-to-Earnings Ratio",
+        "P/B Ratio": "Price-to-Book Ratio",
+        "ROE (%)": "Return on Equity (%)",
+        "ROA (%)": "Return on Assets (%)",
+        "Debt-to-Equity": "Debt-to-Equity Ratio",
+        "Free Cash Flow Yield (%)": "Free Cash Flow Yield (%)",
+        "Revenue Growth (%)": "Revenue Growth (%)",
+        "Net Income Growth (%)": "Net Income Growth (%)",
+    }
+    metrics_df_transposed.rename(index=metric_labels, inplace=True)
 
-            # Display table with AgGrid
-            gb = GridOptionsBuilder.from_dataframe(metrics_df_transposed)
-            gb.configure_default_column(wrapHeaderText=True, autoHeight=True)
-            gb.configure_column("Metric", pinned=True)
-            grid_options = gb.build()
+    # Format numbers for readability
+    metrics_df_transposed = metrics_df_transposed.applymap(format_large_numbers)
 
-            AgGrid(
-                metrics_df_transposed,
-                gridOptions=grid_options,
-                height=400,
-                theme="balham",
-            )
+    # Display table with AgGrid
+    gb = GridOptionsBuilder.from_dataframe(metrics_df_transposed)
+    gb.configure_default_column(wrapHeaderText=True, autoHeight=True)
+    gb.configure_column("Metric", pinned=True)
+    grid_options = gb.build()
 
-            # Year-over-Year Comparison Chart
+    AgGrid(
+        metrics_df_transposed,
+        gridOptions=grid_options,
+        height=400,
+        theme="balham",
+    )
+
+    # Year-over-Year Comparison Chart
             st.subheader("Year-over-Year Comparison")
             st.line_chart(metrics_df.set_index("Year")[["Total Revenue", "Net Income"]])
         else:
