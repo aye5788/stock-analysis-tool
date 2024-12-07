@@ -125,25 +125,26 @@ def main():
                     if custom_unit == "Years":
                         metrics_df = metrics_df.head(custom_length)
 
-                # Transpose the table
-                metrics_df_transposed = metrics_df.set_index("Year").transpose()
+               # Transpose the table and set proper row identification
+metrics_df_transposed = metrics_df.set_index("Year").transpose()
+metrics_df_transposed.index.name = "Metric"  # Add proper row labels
 
-                # Format numbers
-                metrics_df_transposed = metrics_df_transposed.map(format_large_numbers)
+# Format numbers
+metrics_df_transposed = metrics_df_transposed.applymap(format_large_numbers)
 
-                # Display table using AgGrid
-                st.subheader(f"Metrics for {ticker.upper()} ({timeframe})")
-                gb = GridOptionsBuilder.from_dataframe(metrics_df_transposed)
-                gb.configure_default_column(wrapHeaderText=True, autoHeight=True)
-                gb.configure_column("index", pinned=True)
-                grid_options = gb.build()
+# Display table using AgGrid
+st.subheader(f"Metrics for {ticker.upper()} ({timeframe})")
+gb = GridOptionsBuilder.from_dataframe(metrics_df_transposed)
+gb.configure_default_column(wrapHeaderText=True, autoHeight=True)
+gb.configure_column("Metric", pinned=True)  # Ensure the Metric column is pinned
+grid_options = gb.build()
 
-                AgGrid(
-                    metrics_df_transposed,
-                    gridOptions=grid_options,
-                    height=400,
-                    theme="balham",
-                )
+AgGrid(
+    metrics_df_transposed,
+    gridOptions=grid_options,
+    height=400,
+    theme="balham",
+)
 
                 # Year-over-Year Comparison (Chart)
                 st.subheader("Year-over-Year Comparison")
