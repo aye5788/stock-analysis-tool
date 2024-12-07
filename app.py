@@ -19,6 +19,19 @@ def fetch_data(function, symbol, params=None):
         st.error(f"Error fetching data: {response.status_code}")
         return None
 
+# Format large numbers for readability
+def format_large_numbers(value):
+    if isinstance(value, (int, float)):
+        if value >= 1e12:
+            return f"{value / 1e12:.2f}T"
+        elif value >= 1e9:
+            return f"{value / 1e9:.2f}B"
+        elif value >= 1e6:
+            return f"{value / 1e6:.2f}M"
+        elif value >= 1e3:
+            return f"{value / 1e3:.2f}K"
+    return value
+
 # Process and calculate metrics
 def calculate_metrics(overview, income_statement):
     try:
@@ -73,15 +86,20 @@ def calculate_metrics(overview, income_statement):
         st.error(f"Error processing metrics: {e}")
         return None
 
-# Shorten large numbers
-def format_large_numbers(val):
-    if val >= 1e9:
-        return f"{val / 1e9:.2f}B"  # Billions
-    elif val >= 1e6:
-        return f"{val / 1e6:.2f}M"  # Millions
-    elif val >= 1e3:
-        return f"{val / 1e3:.2f}K"  # Thousands
-    return f"{val:.2f}" if isinstance(val, (int, float)) else val
+# Fetch and process stock price data
+def fetch_stock_prices(symbol, timeframe):
+    if timeframe in ["1D", "1W"]:
+        interval = "60min"
+        params = f"interval={interval}&datatype=json"
+        time_series = fetch_data("TIME_SERIES_INTRADAY", symbol, params=params)
+        if time_series and f"Time Series ({interval})" in time_series:
+            return pd.DataFrame.from_dict(time_series[f"Time Series ({interval})"], orient="index").astype(float)
+    else:
+        params = "outputsize=full&datatype=json"
+        time_series = fetch_data("TIME_SERIES_DAILY_ADJUSTED", symbol, params=params)
+        if time_series and "Time Series (Daily)" in time_series:
+            return pd.DataFrame.from_dict(time_series["Time Series (Daily)"], orient="index").astype(float)
+    return None
 
 # Main Streamlit App
 def main():
@@ -92,79 +110,72 @@ def main():
     ticker = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL, MSFT):")
     timeframe = st.sidebar.selectbox(
         "Select Timeframe for Metrics", 
-        ["1D", "1W", "1Y", "YTD", "5Y", "MAX", "Custom"]  # Removed month(s) options
+        ["YTD", "5Y", "MAX", "Custom"]
     )
 
     custom_timeframe = None
     if timeframe == "Custom":
         custom_length = st.sidebar.number_input("Enter Length (e.g., 2):", min_value=1, value=1, step=1)
-        custom_unit = st.sidebar.selectbox("Select Unit:", ["Years", "Days"])
+        custom_unit = st.sidebar.selectbox("Select Unit:", ["Years"])
         custom_timeframe = (custom_length, custom_unit)
+
+    # Initialize metrics_df
+    metrics_df = None
 
     if ticker:
         st.write(f"Fetching data for {ticker}...")
-        
+
         # Fetch overview and income statement
         overview = fetch_data("OVERVIEW", ticker)
         income_statement = fetch_data("INCOME_STATEMENT", ticker)
-        
+
         if overview and income_statement:
             # Calculate metrics
             metrics_df = calculate_metrics(overview, income_statement)
-            
-            if metrics_df is not None:
-                # Filter by timeframe
-                if timeframe == "YTD":
-                    metrics_df = metrics_df[metrics_df["Year"] == str(pd.Timestamp.now().year)]
-                elif timeframe == "5Y":
-                    metrics_df = metrics_df.head(5)
-                elif timeframe == "MAX":
-                    metrics_df = metrics_df
-                elif timeframe == "Custom" and custom_timeframe:
-                    custom_length, custom_unit = custom_timeframe
-                    if custom_unit == "Years":
-                        metrics_df = metrics_df.head(custom_length)
+        else:
+            st.error("Failed to fetch overview or income statement data.")
 
-               # Transpose the table and set proper row identification
-if metrics_df is not None:
-    st.subheader(f"Metrics for {ticker.upper()} ({timeframe})")
+        # Display metrics if available
+        if metrics_df is not None:
+            st.subheader(f"Metrics for {ticker.upper()} ({timeframe})")
 
-    # Filter metrics by timeframe
-    if timeframe == "YTD":
-        metrics_df = metrics_df[metrics_df["Year"] == str(pd.Timestamp.now().year)]
-    elif timeframe == "5Y":
-        metrics_df = metrics_df.head(5)
-    elif timeframe == "MAX":
-        metrics_df = metrics_df
-    elif timeframe == "Custom" and custom_timeframe:
-        custom_length, custom_unit = custom_timeframe
-        if custom_unit == "Years":
-            metrics_df = metrics_df.head(custom_length)
+            # Filter metrics by timeframe
+            if timeframe == "YTD":
+                metrics_df = metrics_df[metrics_df["Year"] == str(pd.Timestamp.now().year)]
+            elif timeframe == "5Y":
+                metrics_df = metrics_df.head(5)
+            elif timeframe == "MAX":
+                metrics_df = metrics_df
+            elif timeframe == "Custom" and custom_timeframe:
+                custom_length, custom_unit = custom_timeframe
+                if custom_unit == "Years":
+                    metrics_df = metrics_df.head(custom_length)
 
-    # Transpose the table
-    metrics_df_transposed = metrics_df.set_index("Year").transpose()
-    metrics_df_transposed.index.name = "Metric"  # Add proper row labels
+            # Transpose the table and set proper row identification
+            metrics_df_transposed = metrics_df.set_index("Year").transpose()
+            metrics_df_transposed.index.name = "Metric"
 
-    # Format numbers
-    metrics_df_transposed = metrics_df_transposed.applymap(format_large_numbers)
+            # Format numbers for readability
+            metrics_df_transposed = metrics_df_transposed.applymap(format_large_numbers)
 
-    # Display table using AgGrid
-    st.subheader(f"Metrics for {ticker.upper()} ({timeframe})")
-    gb = GridOptionsBuilder.from_dataframe(metrics_df_transposed)
-    gb.configure_default_column(wrapHeaderText=True, autoHeight=True)
-    gb.configure_column("Metric", pinned=True)  # Ensure the Metric column is pinned
-    grid_options = gb.build()
+            # Display table with AgGrid
+            gb = GridOptionsBuilder.from_dataframe(metrics_df_transposed)
+            gb.configure_default_column(wrapHeaderText=True, autoHeight=True)
+            gb.configure_column("Metric", pinned=True)
+            grid_options = gb.build()
 
-    AgGrid(
-        metrics_df_transposed,
-        gridOptions=grid_options,
-        height=400,
-        theme="balham",
-    )
+            AgGrid(
+                metrics_df_transposed,
+                gridOptions=grid_options,
+                height=400,
+                theme="balham",
+            )
 
-    # Year-over-Year Comparison (Chart)
-    st.subheader("Year-over-Year Comparison")
-    st.line_chart(metrics_df.set_index("Year")[["Total Revenue", "Net Income"]])
+            # Year-over-Year Comparison Chart
+            st.subheader("Year-over-Year Comparison")
+            st.line_chart(metrics_df.set_index("Year")[["Total Revenue", "Net Income"]])
+        else:
+            st.error("Metrics data is unavailable.")
 
 if __name__ == "__main__":
     main()
