@@ -140,19 +140,6 @@ def main():
                 metrics_df_transposed = metrics_df.set_index("Year").transpose()
                 metrics_df_transposed.index.name = "Metric"
                 
-                metric_labels = {
-                    "Total Revenue": "Total Revenue ($)",
-                    "Net Income": "Net Income ($)",
-                    "P/E Ratio": "Price-to-Earnings Ratio",
-                    "P/B Ratio": "Price-to-Book Ratio",
-                    "ROE (%)": "Return on Equity (%)",
-                    "ROA (%)": "Return on Assets (%)",
-                    "Debt-to-Equity": "Debt-to-Equity Ratio",
-                    "Free Cash Flow Yield (%)": "Free Cash Flow Yield (%)",
-                    "Revenue Growth (%)": "Revenue Growth (%)",
-                    "Net Income Growth (%)": "Net Income Growth (%)",
-                }
-                metrics_df_transposed.rename(index=metric_labels, inplace=True)
                 metrics_df_transposed = metrics_df_transposed.applymap(format_large_numbers)
 
                 st.subheader(f"Metrics for {ticker.upper()} ({timeframe})")
