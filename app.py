@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
+from st_aggrid import AgGrid, GridOptionsBuilder
 import matplotlib.pyplot as plt
 
 # Alpha Vantage API Key
@@ -94,7 +95,16 @@ def main():
 
     # Input for stock ticker
     ticker = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL, MSFT):")
-    timeframe = st.sidebar.selectbox("Select Timeframe for Metrics", ["1D", "1W", "1M", "6M", "1Y", "YTD", "5Y", "MAX"])
+    timeframe = st.sidebar.selectbox(
+        "Select Timeframe for Metrics", 
+        ["1D", "1W", "1M", "6M", "1Y", "YTD", "5Y", "MAX", "Custom"]
+    )
+
+    custom_timeframe = None
+    if timeframe == "Custom":
+        custom_length = st.sidebar.number_input("Enter Length (e.g., 2):", min_value=1, value=1, step=1)
+        custom_unit = st.sidebar.selectbox("Select Unit:", ["Years", "Months", "Days"])
+        custom_timeframe = (custom_length, custom_unit)
 
     if ticker:
         st.write(f"Fetching data for {ticker}...")
@@ -120,14 +130,28 @@ def main():
                     metrics_df = metrics_df.head(5)
                 elif timeframe == "MAX":
                     metrics_df = metrics_df
+                elif timeframe == "Custom" and custom_timeframe:
+                    custom_length, custom_unit = custom_timeframe
+                    if custom_unit == "Years":
+                        metrics_df = metrics_df.head(custom_length)
+                    # Add logic for months or days as needed
                 else:
                     metrics_df = metrics_df  # Default to show all available data
                 
-                # Transpose the table
+                # Transpose and display metrics with AgGrid for better layout and scrolling
                 metrics_df_transposed = metrics_df.set_index("Year").transpose()
+                gb = GridOptionsBuilder.from_dataframe(metrics_df_transposed)
+                gb.configure_default_column(wrapHeaderText=True, autoHeight=True)
+                gb.configure_column("index", pinned=True)
+                grid_options = gb.build()
 
-                # Display metrics table with horizontal scrolling
-                st.dataframe(metrics_df_transposed, use_container_width=True, height=400)
+                AgGrid(
+                    metrics_df_transposed,
+                    gridOptions=grid_options,
+                    height=400,
+                    theme="balham",
+                    enable_enterprise_modules=True,
+                )
 
                 # Year-over-Year Comparison (Chart)
                 st.subheader("Year-over-Year Comparison")
