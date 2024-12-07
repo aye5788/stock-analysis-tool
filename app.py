@@ -15,82 +15,64 @@ def fetch_data(function, symbol):
         st.error(f"Error fetching data: {response.status_code}")
         return None
 
-# Calculate derived metrics
-def calculate_metrics(overview, income_statement, balance_sheet, cash_flow, daily_data):
-    metrics = {}
+# Process and calculate metrics
+def calculate_metrics(overview, income_statement):
     try:
-        # Valuation Metrics
-        metrics["P/E Ratio"] = overview.get("PERatio", "N/A")
-        metrics["P/B Ratio"] = overview.get("PriceToBookRatio", "N/A")
-        metrics["EV/EBITDA"] = overview.get("EVToEBITDA", "N/A")
-        
-        # Profitability Metrics
-        metrics["ROE"] = overview.get("ReturnOnEquityTTM", "N/A")
-        metrics["ROA"] = overview.get("ReturnOnAssetsTTM", "N/A")
-        
-        # Growth Metrics
+        metrics = []
         annual_reports = income_statement["annualReports"]
-        revenue_growth = (float(annual_reports[0]["totalRevenue"]) - float(annual_reports[1]["totalRevenue"])) / float(annual_reports[1]["totalRevenue"])
-        metrics["Revenue Growth"] = round(revenue_growth * 100, 2)
-        
-        earnings_growth = (float(annual_reports[0]["netIncome"]) - float(annual_reports[1]["netIncome"])) / float(annual_reports[1]["netIncome"])
-        metrics["Earnings Growth"] = round(earnings_growth * 100, 2)
-        
-        # Dividend Growth
-        metrics["Dividend Growth"] = overview.get("DividendPerShareTTM", "N/A")
-        
-        # Quality Metrics
-        total_liabilities = float(balance_sheet["totalLiabilities"])
-        total_equity = float(balance_sheet["totalShareholderEquity"])
-        metrics["Debt-to-Equity"] = round(total_liabilities / total_equity, 2)
-        
-        # Free Cash Flow Yield
-        fcf = float(cash_flow["operatingCashflow"]) - float(cash_flow["capitalExpenditures"])
-        market_cap = float(overview["MarketCapitalization"])
-        metrics["Free Cash Flow Yield"] = round(fcf / market_cap, 4)
-        
-        # Asset Turnover
-        total_assets = float(balance_sheet["totalAssets"])
-        metrics["Asset Turnover"] = round(float(annual_reports[0]["totalRevenue"]) / total_assets, 2)
-        
-        # Momentum Metrics (Last 5 Days Price Change)
-        daily_prices = pd.DataFrame.from_dict(daily_data["Time Series (Daily)"], orient="index").astype(float)
-        daily_prices["close"] = daily_prices["4. close"]
-        momentum = (daily_prices.iloc[0]["close"] - daily_prices.iloc[4]["close"]) / daily_prices.iloc[4]["close"]
-        metrics["5-Day Momentum"] = round(momentum * 100, 2)
-        
-        return metrics
+
+        # Process each annual report
+        for report in annual_reports:
+            year = report["fiscalDateEnding"][:4]  # Extract the year
+            metrics.append({
+                "Year": year,
+                "P/E Ratio": overview.get("PERatio", "N/A"),
+                "P/B Ratio": overview.get("PriceToBookRatio", "N/A"),
+                "Revenue Growth": float(report["totalRevenue"]) if "totalRevenue" in report else "N/A",
+                "Net Income": float(report["netIncome"]) if "netIncome" in report else "N/A",
+                "Total Revenue": float(report["totalRevenue"]) if "totalRevenue" in report else "N/A",
+            })
+
+        # Convert metrics into a DataFrame
+        return pd.DataFrame(metrics)
     except Exception as e:
-        st.error(f"Error calculating metrics: {e}")
+        st.error(f"Error processing metrics: {e}")
         return None
 
-# Streamlit App
+# Main Streamlit App
 def main():
-    st.title("Stock Analysis Tool")
-    ticker = st.text_input("Enter Stock Ticker (e.g., AAPL, MSFT):")
+    st.title("Enhanced Stock Analysis Tool")
+    st.sidebar.header("Options")
+    ticker = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL, MSFT):")
     
     if ticker:
-        st.write("Fetching data...")
+        st.write(f"Fetching data for {ticker}...")
         overview = fetch_data("OVERVIEW", ticker)
         income_statement = fetch_data("INCOME_STATEMENT", ticker)
-        balance_sheet = fetch_data("BALANCE_SHEET", ticker)
-        cash_flow = fetch_data("CASH_FLOW", ticker)
-        daily_data = fetch_data("TIME_SERIES_DAILY", ticker)
         
-        if overview and income_statement and balance_sheet and cash_flow and daily_data:
-            st.write("Calculating metrics...")
-            metrics = calculate_metrics(
-                overview, 
-                income_statement, 
-                balance_sheet["annualReports"][0], 
-                cash_flow["annualReports"][0], 
-                daily_data
-            )
+        if overview and income_statement:
+            st.write(f"Calculating metrics for {ticker.upper()}...")
+            metrics_df = calculate_metrics(overview, income_statement)
             
-            if metrics:
-                st.subheader(f"Metrics for {ticker.upper()}")
-                for metric, value in metrics.items():
-                    st.write(f"{metric}: {value}")
+            if metrics_df is not None:
+                # Dropdown for selecting a timeframe
+                timeframes = ["Last 3 Years", "Last 5 Years", "All Time"]
+                timeframe = st.sidebar.selectbox("Select Timeframe", timeframes)
+
+                # Filter the DataFrame based on timeframe
+                if timeframe == "Last 3 Years":
+                    metrics_df = metrics_df.head(3)
+                elif timeframe == "Last 5 Years":
+                    metrics_df = metrics_df.head(5)
+                
+                # Display metrics in a table
+                st.subheader(f"Metrics for {ticker.upper()} ({timeframe})")
+                st.dataframe(metrics_df)
+                
+                # Add year-over-year comparison
+                st.subheader("Year-over-Year Comparison")
+                st.write("Below is a comparison of metrics across years:")
+                st.line_chart(metrics_df.set_index("Year")[["P/E Ratio", "P/B Ratio", "Revenue Growth"]])
             else:
                 st.error("Could not calculate metrics.")
         else:
