@@ -73,6 +73,16 @@ def calculate_metrics(overview, income_statement):
         st.error(f"Error processing metrics: {e}")
         return None
 
+# Shorten large numbers
+def format_large_numbers(val):
+    if val >= 1e9:
+        return f"{val / 1e9:.2f}B"  # Billions
+    elif val >= 1e6:
+        return f"{val / 1e6:.2f}M"  # Millions
+    elif val >= 1e3:
+        return f"{val / 1e3:.2f}K"  # Thousands
+    return f"{val:.2f}" if isinstance(val, (int, float)) else val
+
 # Main Streamlit App
 def main():
     st.title("Enhanced Stock Analysis Tool")
@@ -82,13 +92,13 @@ def main():
     ticker = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL, MSFT):")
     timeframe = st.sidebar.selectbox(
         "Select Timeframe for Metrics", 
-        ["1D", "1W", "1M", "6M", "1Y", "YTD", "5Y", "MAX", "Custom"]
+        ["1D", "1W", "1Y", "YTD", "5Y", "MAX", "Custom"]  # Removed month(s) options
     )
 
     custom_timeframe = None
     if timeframe == "Custom":
         custom_length = st.sidebar.number_input("Enter Length (e.g., 2):", min_value=1, value=1, step=1)
-        custom_unit = st.sidebar.selectbox("Select Unit:", ["Years", "Months", "Days"])
+        custom_unit = st.sidebar.selectbox("Select Unit:", ["Years", "Days"])
         custom_timeframe = (custom_length, custom_unit)
 
     if ticker:
@@ -119,14 +129,13 @@ def main():
                 metrics_df_transposed = metrics_df.set_index("Year").transpose()
 
                 # Format numbers
-                metrics_df_transposed = metrics_df_transposed.applymap(
-                    lambda x: f"{x:,.2f}" if isinstance(x, (int, float)) else x
-                )
+                metrics_df_transposed = metrics_df_transposed.map(format_large_numbers)
 
                 # Display table using AgGrid
                 st.subheader(f"Metrics for {ticker.upper()} ({timeframe})")
                 gb = GridOptionsBuilder.from_dataframe(metrics_df_transposed)
                 gb.configure_default_column(wrapHeaderText=True, autoHeight=True)
+                gb.configure_column("index", pinned=True)
                 grid_options = gb.build()
 
                 AgGrid(
